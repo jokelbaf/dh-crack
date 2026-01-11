@@ -2,9 +2,13 @@ use num::bigint::BigUint;
 use std::collections::HashMap;
 use thiserror::Error;
 
+/// The modulus used in the Diffie-Hellman key exchange: 2^64 - 59.
 pub const MODULUS: u128 = (1u128 << 64) - 59;
+
+/// The generator used in the Diffie-Hellman key exchange.
 pub const GENERATOR: u128 = 5;
 
+/// Errors that can occur during DH operations.
 #[derive(Debug, Error)]
 pub enum DhCrackError {
     #[error("invalid hex string: {0}")]
@@ -17,14 +21,21 @@ pub enum DhCrackError {
     DiscreteLogFailed,
 }
 
+/// A specialized Result type for DH operations.
 pub type Result<T> = std::result::Result<T, DhCrackError>;
 
+/// Represents a Diffie-Hellman key (public or private).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DhKey {
     value: u128,
 }
 
 impl DhKey {
+    /// Creates a DhKey from an 8-byte little-endian byte array.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the byte slice is not exactly 8 bytes or if the value is zero.
     pub fn from_bytes_le(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != 8 {
             return Err(DhCrackError::InvalidKeyLength(bytes.len()));
@@ -38,11 +49,21 @@ impl DhKey {
         Ok(Self { value })
     }
 
+    /// Creates a DhKey from a hexadecimal string (little-endian).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hex string is invalid, not exactly 16 characters, or represents zero.
     pub fn from_hex_le(hex: &str) -> Result<Self> {
         let bytes = hex::decode(hex)?;
         Self::from_bytes_le(&bytes)
     }
 
+    /// Creates a DhKey from a u64 value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value is zero.
     pub fn from_u64(value: u64) -> Result<Self> {
         if value == 0 {
             return Err(DhCrackError::ZeroPublicKey);
@@ -52,34 +73,83 @@ impl DhKey {
         })
     }
 
+    /// Converts the key to an 8-byte little-endian byte array.
     pub fn to_bytes_le(&self) -> [u8; 8] {
         (self.value as u64).to_le_bytes()
     }
 
+    /// Converts the key to a hexadecimal string (little-endian).
     pub fn to_hex_le(&self) -> String {
         hex::encode(self.to_bytes_le())
     }
 
+    /// Returns the key value as a u64.
     pub fn as_u64(&self) -> u64 {
         self.value as u64
     }
 
+    /// Returns the key value as a u128.
     pub fn as_u128(&self) -> u128 {
         self.value
     }
 }
 
+/// Cracks a Diffie-Hellman private key from a public key using the Pohlig-Hellman algorithm.
+///
+/// This function solves the discrete logarithm problem to find the private key
+/// that corresponds to the given public key.
+///
+/// # Errors
+///
+/// Returns an error if the discrete logarithm computation fails.
+///
+/// # Example
+///
+/// ```
+/// use dh_crack::{DhKey, crack_dh};
+///
+/// let public = DhKey::from_hex_le("2fcdd27bf0dfe780").unwrap();
+/// let private = crack_dh(&public).unwrap();
+/// assert_eq!(private.to_hex_le(), "cbed2a7d9585b611");
+/// ```
 pub fn crack_dh(public_key: &DhKey) -> Result<DhKey> {
     let private = pohlig_hellman(GENERATOR, public_key.value, MODULUS)
         .ok_or(DhCrackError::DiscreteLogFailed)?;
     Ok(DhKey { value: private })
 }
 
+/// Generates a public key from a private key using the DH parameters.
+///
+/// Computes g^private mod p where g is the generator and p is the modulus.
+///
+/// # Example
+///
+/// ```
+/// use dh_crack::{DhKey, dh_exchange};
+///
+/// let private = DhKey::from_hex_le("cbed2a7d9585b611").unwrap();
+/// let public = dh_exchange(&private);
+/// assert_eq!(public.to_hex_le(), "2fcdd27bf0dfe780");
+/// ```
 pub fn dh_exchange(private_key: &DhKey) -> DhKey {
     let public = mod_pow(GENERATOR, private_key.value, MODULUS);
     DhKey { value: public }
 }
 
+/// Computes the shared secret from a peer's public key and your private key.
+///
+/// Calculates peer_public^private mod p, which should match the value computed
+/// by the peer using your public key.
+///
+/// # Example
+///
+/// ```
+/// use dh_crack::{DhKey, dh_secret};
+///
+/// let my_private = DhKey::from_hex_le("cbed2a7d9585b611").unwrap();
+/// let peer_public = DhKey::from_hex_le("7b074553b055f69d").unwrap();
+/// let shared = dh_secret(&peer_public, &my_private);
+/// ```
 pub fn dh_secret(peer_public: &DhKey, private_key: &DhKey) -> DhKey {
     let secret = mod_pow(peer_public.value, private_key.value, MODULUS);
     DhKey { value: secret }
