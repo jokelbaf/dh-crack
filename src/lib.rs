@@ -157,7 +157,7 @@ fn factor_order(mut n: u128) -> Vec<(u128, u32)> {
     let mut d = 2u128;
 
     while d * d <= n {
-        if n.is_multiple_of(d){
+        if n.is_multiple_of(d) {
             let mut exp = 0u32;
             while n.is_multiple_of(d) {
                 n /= d;
