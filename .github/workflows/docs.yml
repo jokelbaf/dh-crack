@@ -20,7 +20,7 @@ jobs:
         run: cargo doc --no-deps --verbose
 
       - name: Add redirect
-        run: echo '<meta http-equiv="refresh" content="0;url=spectrum/index.html">' > target/doc/index.html
+        run: echo '<meta http-equiv="refresh" content="0;url=dh_crack/index.html">' > target/doc/index.html
 
       - name: Copy CNAME
         run: cp CNAME target/doc/CNAME
